@@ -38,7 +38,7 @@ spec:
             - "--interleave=all"
             - "mongod"
             - "--wiredTigerCacheSizeGB"
-            - "0.1"
+            - "0.25"
             - "--bind_ip"
             - "0.0.0.0"
             - "--replSet"
@@ -50,7 +50,7 @@ spec:
               mountPath: /data/db
   volumeClaimTemplates:
     - metadata:
-      name: mongodb-persistent-storage-claim
+        name: mongodb-persistent-storage-claim
       spec:
         storageClassName: gp2
         accessModes:

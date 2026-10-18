@@ -88,7 +88,7 @@ sudo ./aws/install
 
 Once the Cluster is ready run the command to set context:
 ```
-aws eks update-kubeconfig --name EKS_CLUSTER_NAME --region us-west-2
+aws eks update-kubeconfig --name EKS_CLUSTER_NAME --region us-east-1
 ```
 
 To check the nodes in your cluster run
@@ -105,9 +105,9 @@ git clone https://github.com/N4si/K8s-voting-app.git
 
 **Create CloudChamp Namespace**
 ```
-kubectl create ns cloudchamp
+kubectl create ns production
 
-kubectl config set-context --current --namespace cloudchamp
+kubectl config set-context --current --namespace production
 ```
 
 **MONGO Database Setup**
@@ -122,7 +122,10 @@ Mongo Service
 ```
 kubectl apply -f mongo-service.yaml
 ```
-
+Enter to mongo pod
+```
+kubectl exec -it mongo-0 -- mongo
+```
 Create a temporary network utils pod. Enter into a bash session within it. In the terminal run the following command:
 ```
 kubectl run --rm utils -it --image praqma/network-multitool -- bash
@@ -140,18 +143,23 @@ exit
 
 On the `mongo-0` pod, initialise the Mongo database Replica set. In the terminal run the following command:
 ```
-cat << EOF | kubectl exec -it mongo-0 -- mongo
+cat << 'EOF' | kubectl exec -i mongodb-0 -n production -- mongosh
 rs.initiate();
 sleep(2000);
-rs.add("mongo-1.mongo:27017");
+
+// Add the two running secondary nodes
+rs.add("mongodb-1.mongodb.production.svc.cluster.local:27017");
 sleep(2000);
-rs.add("mongo-2.mongo:27017");
+rs.add("mongodb-2.mongodb.production.svc.cluster.local:27017");
 sleep(2000);
+
+// Reconfigure the first member to use its full internal cluster DNS
 cfg = rs.conf();
-cfg.members[0].host = "mongo-0.mongo:27017";
+cfg.members[0].host = "mongodb-0.mongodb.production.svc.cluster.local:27017";
 rs.reconfig(cfg, {force: true});
 sleep(5000);
 EOF
+
 ```
 
 Note: Wait until this command completes successfully, it typically takes 10-15 seconds to finish, and completes with the message: bye
@@ -159,14 +167,15 @@ Note: Wait until this command completes successfully, it typically takes 10-15 s
 
 To confirm run this in the terminal:
 ```
-kubectl exec -it mongo-0 -- mongo --eval "rs.status()" | grep "PRIMARY\|SECONDARY"
+kubectl exec -it mongodb-0 -n production -- mongosh --eval "rs.status()" | grep "PRIMARY\|SECONDARY"
 ```
 
 Load the Data in the database by running this command:
 ## Note: use langdb not langdb() as shown in the video
 ```
-cat << EOF | kubectl exec -it mongo-0 -- mongo
+cat << 'EOF' | kubectl exec -i mongodb-0 -n production -- mongosh
 use langdb;
+
 db.languages.insert({"name" : "csharp", "codedetail" : { "usecase" : "system, web, server-side", "rank" : 5, "compiled" : false, "homepage" : "https://dotnet.microsoft.com/learn/csharp", "download" : "https://dotnet.microsoft.com/download/", "votes" : 0}});
 db.languages.insert({"name" : "python", "codedetail" : { "usecase" : "system, web, server-side", "rank" : 3, "script" : false, "homepage" : "https://www.python.org/", "download" : "https://www.python.org/downloads/", "votes" : 0}});
 db.languages.insert({"name" : "javascript", "codedetail" : { "usecase" : "web, client-side", "rank" : 7, "script" : false, "homepage" : "https://en.wikipedia.org/wiki/JavaScript", "download" : "n/a", "votes" : 0}});
@@ -174,8 +183,9 @@ db.languages.insert({"name" : "go", "codedetail" : { "usecase" : "system, web, s
 db.languages.insert({"name" : "java", "codedetail" : { "usecase" : "system, web, server-side", "rank" : 1, "compiled" : true, "homepage" : "https://www.java.com/en/", "download" : "https://www.java.com/en/download/", "votes" : 0}});
 db.languages.insert({"name" : "nodejs", "codedetail" : { "usecase" : "system, web, server-side", "rank" : 20, "script" : false, "homepage" : "https://nodejs.org/en/", "download" : "https://nodejs.org/en/download/", "votes" : 0}});
 
-db.languages.find().pretty();
+db.languages.find();
 EOF
+
 ```
 
 Create Mongo secret:
